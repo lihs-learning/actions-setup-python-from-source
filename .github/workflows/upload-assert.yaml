@@ -1,0 +1,45 @@
+on:
+  push:
+    branches:
+      - 'release'
+name: Upload Python Assert
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ['2.7.18', '3.4.10']
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Build python from source
+        env:
+          PYTHON_SOURCE_URL: https://www.python.org/ftp/python/${{ matrix.python_version }}/Python-${{ matrix.python_version }}.tgz
+        run: |
+          cd /tmp
+          curl -s -L "$PYTHON_SOURCE_URL" | tar -zxf - -C ./
+          cd Python-${{ matrix.python_version }}
+          ./configure --enable-optimizations --prefix=/opt/python
+          make
+          sudo make install
+      - name: Prepare qshell
+        env:
+          QSHELL_URL: https://devtools.qiniu.com/qshell-${{ vars.QSHELL_VERSION }}-linux-amd64.tar.gz
+        run: |
+          set -e
+          mkdir -p /opt/qshell/bin
+          curl -s -L "$QSHELL_URL" | tar -zxf - -C /opt/qshell/bin
+          echo "/opt/qshell/bin" >> $GITHUB_PATH
+      - name: Upload asset
+        env:
+          TAR_FILENAME: python-v${{ matrix.python_version }}.tar.gz
+          PUBLISH_ACCESS_KEY: ${{ secrets.PUBLISH_ACCESS_KEY }}
+          PUBLISH_SECRET_KEY: ${{ secrets.PUBLISH_SECRET_KEY }}
+          PUBLISH_BUCKET_NAME: ${{ secrets.PUBLISH_BUCKET_NAME }}
+        run: |
+          set -e
+          cd /tmp
+          tar -czf "$TAR_FILENAME" /opt/python
+          qshell account -- "$PUBLISH_ACCESS_KEY" "$PUBLISH_SECRET_KEY" default
+          qshell rput --resumable-api-v2 --overwrite "$PUBLISH_BUCKET_NAME" "python/$TAR_FILENAME" "$TAR_FILENAME"
+
+
